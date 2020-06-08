@@ -13,10 +13,6 @@
                 width: 640px;
                 height: 320px;
             }
-
-            canvas:hover {
-                cursor: nw-resize;
-            }
         </style>
     </head>
 
@@ -33,6 +29,9 @@
         <br><br>
         <canvas id="level-density" width=1280 height=720></canvas>
         <br>
+        <text>Drag canvas to resize it.</text>
+        <text id="chunk-info"></text>
+        <br><br>
         <text id="level-info"></text>
     </body>
 
@@ -47,6 +46,7 @@
 
         let timeStamp;
         let resizing = false;
+        let analyzed = false;
 
         const accuracy = { x: 100, y: 50 };     // chunk amount
     
@@ -62,7 +62,21 @@
                 canvas.style.width = resizing.w + e.offsetX - resizing.x + "px";
                 canvas.style.height = resizing.h + e.offsetY - resizing.y + "px";
             }
-        })
+        });
+        // handle chunk analyzation
+        canvas.addEventListener("mousemove", e => {
+            if (analyzed) {
+                let w = (canvas.width / accuracy.x),
+                    h = (canvas.height / accuracy.y),
+                    ox = canvas.width / css(canvas.style.width),
+                    oy = canvas.height / css(canvas.style.height);
+
+                let cx = Math.round( (e.offsetX * ox - w / 2) / w );
+                let cy = accuracy.y - Math.round( (e.offsetY * oy - h / 2) / h );
+
+                document.getElementById("chunk-info").innerHTML = `Objects in chunk: ${analyzed[cx][cy] ? analyzed[cx][cy] : "none"}`;
+            }
+        });
 
         function setChunkSize() {       // read function name
             let x = Number(document.getElementById("acc-x").value), y = Number(document.getElementById("acc-y").value);
@@ -119,10 +133,9 @@
             // draw the chunks
             let w = (canvas.width / accuracy.x),
                 h = (canvas.height / accuracy.y);
-            ctx.fillStyle = "#f00";
             chunks.forEach((c, x) => {
                 c.forEach((a, y) => {
-                    ctx.globalAlpha = a / most;
+                    ctx.fillStyle = `rgb(${(1 - a / most) * 255},${a / most * 255},0)`;
                     ctx.fillRect(x * w, y * h, w, h );
                 });
             });
@@ -137,6 +150,8 @@
             // hide the select options
             document.getElementById("reload-text").style.display = "initial";
             document.getElementById("selector").style.display = "none";
+
+            analyzed = chunks;
         }
 
         ipc.on("main", (event, arg) => {        // main process messages
