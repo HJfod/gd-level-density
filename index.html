@@ -10,6 +10,8 @@
 
             canvas {
                 background-color: #aaa;
+                width: 640px;
+                height: 320px;
             }
 
             canvas:hover {
@@ -19,54 +21,78 @@
     </head>
 
     <body>
-        <button onclick="select()">Select level</button>
+        <div id="selector">
+            <button onclick="select()">Select level</button>
+            <text>Chunk size: </text>
+            <input size=4 id="acc-x" value="100"></input>x<input size=4 id="acc-y" value=50></input>
+            <button onclick="setChunkSize()">Set</button>
+        </div>
+        <text id="reload-text">Press Ctrl + R to select an another level.</text>
         <br>
         <text id="info"></text>
         <br><br>
-        <canvas id="level-density" width=1200 height=300></canvas>
+        <canvas id="level-density" width=1280 height=720></canvas>
         <br>
         <text id="level-info"></text>
     </body>
 
     <script>
+        // set up variables n such
+
         const ipc = require("electron").ipcRenderer;
         const canvas = document.getElementById("level-density");
         const ctx = canvas.getContext("2d");
 
+        document.getElementById("reload-text").style.display = "none";
+
         let timeStamp;
         let resizing = false;
 
-        const accuracy = { x: 100, y: 50 };
+        const accuracy = { x: 100, y: 50 };     // chunk amount
+    
+        function css(v) {       // get the number value of a css variable
+            return Number(v.replace("px",""));
+        }
 
-        canvas.addEventListener("mousedown", e => resizing = { x: e.offsetX, y: e.offsetY, w: canvas.width, h: canvas.height });
+        // handle canvas resize
+        canvas.addEventListener("mousedown", e => resizing = { x: e.offsetX, y: e.offsetY, w: css(canvas.style.width), h: css(canvas.style.height) });
         document.addEventListener("mouseup", e => resizing = false);
         document.addEventListener("mousemove", e => {
             if (resizing) {
-                canvas.width = resizing.w + e.offsetX - resizing.x;
-                canvas.height = resizing.h + e.offsetY - resizing.y;
+                canvas.style.width = resizing.w + e.offsetX - resizing.x + "px";
+                canvas.style.height = resizing.h + e.offsetY - resizing.y + "px";
             }
         })
 
-        function select() {
-            timeStamp = performance.now();
-            ipc.send("main", JSON.stringify({ action: "level-path" }));
+        function setChunkSize() {       // read function name
+            let x = Number(document.getElementById("acc-x").value), y = Number(document.getElementById("acc-y").value);
+            accuracy.x = x;
+            accuracy.y = y;
         }
 
-        function drawData(points, y) {
-            ctx.clearRect(0,0,canvas.width, canvas.height);
+        function select() {             // select level
+            timeStamp = performance.now();          // start level load time count
+            ipc.send("main", JSON.stringify({ action: "level-path" }));     // tell the main process to open up a level and decode it
+        }
 
-            ctx.translate(0, canvas.height);
+        function drawData(points, y) {          // draw the data
+            ctx.clearRect(0,0,canvas.width, canvas.height);     // clear the canvas
+
+            ctx.translate(0, canvas.height);        // flip the canvas upside down because reasons
             ctx.scale(1, -1);
 
-            const nearest = points[0].x;
+            // get the biggest and smallest x and y values
+            const nearest = points[0].x;   
             const furthest = points[points.length-1].x;
             const highest = y[y.length-1];
             const lowest = y[0];
 
+            // init chunks
             const chunks = Array.from({ length: accuracy.x }, () => 
                 Array.from({ length: accuracy.y }, () => false)
             );
 
+            // loop through points and add 1 to the chunk it's contained in
             points.forEach(p => {
                 let cx = Math.round( ((p.x - nearest) / furthest * canvas.width) / (canvas.width / ( accuracy.x - 1 )) );
                 let cy = Math.round( ((p.y - lowest)  / highest * canvas.height) / (canvas.height / ( accuracy.y - 1 )) );
@@ -78,17 +104,19 @@
                 chunks[cx][cy] = c;
             });
 
-            let most = 0, least = 0, base = .1;
+            // check which chunk has the most and which has the least amount of points
+            let most = 0, least;
             chunks.forEach(c => {
                 c.forEach(a => {
                     if (a > most) {
                         most = a;
-                    }else if (a < least) {
+                    }else if (least ? a < least : true) {
                         least = a;
                     }
                 });
             });
 
+            // draw the chunks
             let w = (canvas.width / accuracy.x),
                 h = (canvas.height / accuracy.y);
             ctx.fillStyle = "#f00";
@@ -99,21 +127,26 @@
                 });
             });
 
+            // show info about data
             document.getElementById("level-info").innerHTML = `Operation took ${Math.round(performance.now()-timeStamp)} ms.<br>
             Chunks: ${accuracy.x}x${accuracy.y}<br>
             Most objects in a chunk: ${most}<br>
             Least objects in a chunk: ${least}<br>
             Total objects: ${points.length}`;
+
+            // hide the select options
+            document.getElementById("reload-text").style.display = "initial";
+            document.getElementById("selector").style.display = "none";
         }
 
-        ipc.on("main", (event, arg) => {
+        ipc.on("main", (event, arg) => {        // main process messages
             const args = JSON.parse(arg);
 
             switch (args.action) {
-                case "info":
+                case "info":            // set status message
                     document.getElementById("info").innerHTML = args.info;
                     break;
-                case "level-data":
+                case "level-data":      // get level data
                     let points = [];
                     let y = args.y.map(o => Number(o));
                     args.x.map(o => Number(o)).forEach((i, ix) => {

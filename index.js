@@ -1,20 +1,19 @@
+// import modules
+
 const { app, BrowserWindow, dialog } = require("electron");
 const ipc = require("electron").ipcMain;
 
 const fs = require("fs");
 const pako = require('pako');
-const readline = require('readline');
-const path = require("path");
 
-let w;
+let w;          // main window
 
-const rl = readline.createInterface({
-    input: process.stdin,
-    output: process.stdout
-});
-
-app.on("ready", () => {
-    w = new BrowserWindow({ webPreferences: { nodeIntegration: true } });
+app.on("ready", () => {     // make the window, show the html file in it and close the app when the window is closed
+    w = new BrowserWindow({
+        webPreferences: { 
+            nodeIntegration: true       // this right here is the reason i am not a professional app dev
+        }         
+    });
 
     w.loadFile("index.html");
 
@@ -23,7 +22,7 @@ app.on("ready", () => {
     });
 });
 
-decodeXor = (str, key) => {
+decodeXor = (str, key) => {         // this function, like, does some weird decody shit (thanks gdcolon)
     /**
      * @param {String} str The data to decode
      * @param {Integrer} key The decoding key
@@ -35,7 +34,7 @@ decodeXor = (str, key) => {
     return res;
 };
 
-decodeBase64 = str => {
+decodeBase64 = str => {         // this function, like, does some weird decody shit (thanks smjs)
     /**
      * @param {String} str The string to decode
      */
@@ -43,7 +42,7 @@ decodeBase64 = str => {
     return Buffer.from(str.replace(/-/g, "+").replace(/_/g, "/"), "base64");
 };
 
-getLevelValue = (lvl, key, type) => {
+getLevelValue = (lvl, key, type) => {         // gets a key value from a level's data
     /**
      * @param {String} lvl Level data
      * @param {String} key The key to get
@@ -60,36 +59,37 @@ getLevelValue = (lvl, key, type) => {
     }
 };
 
-function whip(msg) {
+function whip(msg) {         // status message in console and also in app so i don't have to call both of these mfs twice every time
+    // DON'T ASK WHY I CALLED IT 'WHIP'
     console.log(msg);
     w.webContents.send("main", JSON.stringify({ action: "info", info: msg }));
 }
 
-ipc.on("main", (event, arg) => {
-    const args = JSON.parse(arg);
+ipc.on("main", (event, arg) => {        // when window sends a message
+    const args = JSON.parse(arg);       // the message is a JSON object because best way to transfer data
 
-    switch (args.action) {
+    switch (args.action) {              // switch the action parameter of the message
         case "level-path":
-            const levelPath = dialog.showOpenDialogSync()[0];
+            const levelPath = dialog.showOpenDialogSync()[0];       // prompt the user to select a file
             try {
-                fs.accessSync(levelPath);
+                fs.accessSync(levelPath);           // check if the file exists
 
-                if (levelPath.endsWith(".gmd")) {
+                if (levelPath.endsWith(".gmd")) {       // arbitary check to see if it's a .gmd file
                     whip("Decoding file...");
 
-                    const levelFile = fs.readFileSync(levelPath, "utf8");
+                    const levelFile = fs.readFileSync(levelPath, "utf8");       // read the file, because, like, it's been verified n shit
 
                     whip(`Level: ${getLevelValue(levelFile, "k2", "s")}`);
             
-                    let buffer;
+                    let buffer;     // start, like, a buffer
                     try {
-                        buffer = pako.inflate(Buffer.from(getLevelValue(levelFile, "k4", "s"), 'base64'), { to:"string" } );
-                        levelData = buffer.toString("utf8");
-                        levelObj = levelData.split(";").splice(1,levelData.split(";").length-2);
+                        buffer = pako.inflate(Buffer.from(getLevelValue(levelFile, "k4", "s"), 'base64'), { to:"string" } );    // literally no clue i just copied this straight off gdbrowser
+                        levelData = buffer.toString("utf8");   
+                        levelObj = levelData.split(";").splice(1,levelData.split(";").length-2);        // split the level data on every ; to get all the objects
 
                         let xPos = [];
                         let yPos = [];
-                        levelObj.forEach(o => {
+                        levelObj.forEach(o => {     // loop through all objects and collect the key-value pairs, then push the x and y positions of objects to two arrays
                             let keys = [];
                             let d = o.split(",");
                             for (let i = 0; i < d.length; i += 2) {
@@ -106,7 +106,7 @@ ipc.on("main", (event, arg) => {
                         });
                         console.log(`Object count: ${levelObj.length}`);
 
-                        w.webContents.send("main", JSON.stringify({ action: "level-data", x: xPos, y: yPos }));
+                        w.webContents.send("main", JSON.stringify({ action: "level-data", x: xPos, y: yPos }));     // send the x and y poss of all objects to main window to deal with
                     } catch(e) {
                         whip(e);
                     }
